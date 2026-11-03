@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <vector>
 #include <thread>
@@ -6,13 +5,57 @@
 #include <semaphore.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
+// Sincronizacion
 sem_t mesas;
 pthread_mutex_t mutexLog;
 
-// Iniciar tablero
+// Conexiones del tablero
+vector<vector<int>> conexiones(25);
+
+void conectar(int a, int b)
+{
+    conexiones[a].push_back(b);
+    conexiones[b].push_back(a);
+}
+
+void inicializarConexiones()
+{
+    for (int fila = 0; fila < 5; fila++) {
+        for (int col = 0; col < 5; col++) {
+
+            int actual = fila * 5 + col;
+
+            if (col < 4)
+                conectar(actual, actual + 1);
+
+            if (fila < 4)
+                conectar(actual, actual + 5);
+        }
+    }
+}
+
+// Generar una espera aleatoria entre 50 y 300 ms
+int generarEspera()
+{
+    return 50 + rand() % 251;
+}
+
+// Probar los tiempos aleatorios
+void probarTiempo()
+{
+    for (int i = 0; i < 10; i++) {
+        int tiempo = generarEspera();
+
+        cout << "Espera: " << tiempo << " ms" << endl;
+    }
+}
+
+// Inicializar tablero
 void inicializarTablero(string tablero[5][5])
 {
     for (int i = 0; i < 5; i++) {
@@ -53,6 +96,52 @@ void mostrarTablero(string tablero[5][5])
     }
 
     cout << endl;
+}
+
+// Mover una ficha
+bool moverFicha(string tablero[5][5], int origen, int destino)
+{
+    // Verificar que las posiciones existan
+    if (origen < 0 || origen >= 25 ||
+        destino < 0 || destino >= 25) {
+        return false;
+    }
+
+    int filaOrigen = origen / 5;
+    int colOrigen = origen % 5;
+
+    int filaDestino = destino / 5;
+    int colDestino = destino % 5;
+
+    // Verificar que el origen tenga una ficha
+    if (tablero[filaOrigen][colOrigen] == "V") {
+        return false;
+    }
+
+    // Verificar que el destino este vacio
+    if (tablero[filaDestino][colDestino] != "V") {
+        return false;
+    }
+
+    // Verificar que exista una conexion
+    bool conectado = false;
+
+    for (int posicion : conexiones[origen]) {
+        if (posicion == destino) {
+            conectado = true;
+            break;
+        }
+    }
+
+    if (!conectado) {
+        return false;
+    }
+
+    // Realizar movimiento
+    tablero[filaDestino][colDestino] = tablero[filaOrigen][colOrigen];
+    tablero[filaOrigen][colOrigen] = "V";
+
+    return true;
 }
 
 // Simulacion de una partida
@@ -99,6 +188,12 @@ int main(int argc, char* argv[])
         cout << "Parametros invalidos." << endl;
         return 1;
     }
+
+    inicializarConexiones();
+    srand(time(nullptr));
+
+    // Probar los tiempos aleatorios
+    probarTiempo();
 
     // Inicializar sincronizacion
     sem_init(&mesas, 0, M);
