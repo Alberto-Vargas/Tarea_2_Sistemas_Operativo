@@ -1,32 +1,3 @@
-torneo-komikan/
-├── main.cpp
-├── config.txt
-└── ejecutar.sh
-Importante: El 10 representa los jugadores y el 2 las mesas. El config.txt se lee automáticamente desde tu código.
-
-si eso de ejecutar
-¿Te refieres a que el Bash tampoco debe ejecutar el programa automáticamente, sino solamente compilarlo?
-
-Si es así, lo dejamos sin ./torneo 10 2.
-
-SIN ESO
-JAJA entendido. Sin ejecutar el torneo, solamente compilar.
-
-#!/bin/bash
-g++ main.cpp -o torneo -pthread
-
-Ejecutas el Bash con:
-
-chmod +x ejecutar.sh
-./ejecutar.sh
-
-Después ejecutas el torneo manualmente cuando quieras:
-
-./torneo 10 2
-
-
-
-
 
 #include <iostream>
 #include <vector>
