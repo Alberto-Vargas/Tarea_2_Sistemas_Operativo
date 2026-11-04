@@ -7,12 +7,20 @@
 #include <pthread.h>
 #include <random>
 #include <chrono>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 
 using namespace std;
 
 // Sincronizacion general
 sem_t mesas;
 pthread_mutex_t mutexLog;
+
+// Matchmaker
+queue<int> colaJugadores;
+mutex mutexCola;
+condition_variable nuevosJugadores;
 
 // Conexiones del tablero
 vector<vector<int>> conexiones(28);
@@ -372,7 +380,7 @@ void moverPerro(Partida* partida, int id)
 }
 
 // Simulacion de una partida
-void jugarPartida(int id)
+void jugarPartida(int id, int jugadorPuma, int jugadorPerros)
 {
     sem_wait(&mesas);
 
@@ -383,6 +391,8 @@ void jugarPartida(int id)
 
     pthread_mutex_lock(&mutexLog);
     cout << "\nPartida " << id << " comienza." << endl;
+    cout << "Jugador " << jugadorPuma << " controla al Puma." << endl;
+    cout << "Jugador " << jugadorPerros << " controla a los Perros." << endl;
     mostrarTablero(partida.tablero);
     pthread_mutex_unlock(&mutexLog);
 
@@ -413,6 +423,62 @@ void jugarPartida(int id)
     sem_post(&mesas);
 }
 
+// Registrar llegada de un jugador
+void recibirJugador(int id)
+{
+    {
+        lock_guard<mutex> bloqueo(mutexCola);
+        colaJugadores.push(id);
+    }
+
+    pthread_mutex_lock(&mutexLog);
+    cout << "Jugador " << id << " conectado al servidor." << endl;
+    pthread_mutex_unlock(&mutexLog);
+
+    nuevosJugadores.notify_one();
+}
+
+// Matchmaker: emparejar jugadores y asignar partidas
+void matchmaker(int N, vector<thread>* partidas)
+{
+    int cantidadPartidas = N / 2;
+
+    for (int i = 0; i < cantidadPartidas; i++) {
+
+        // Esperar hasta recibir dos jugadores
+        unique_lock<mutex> bloqueo(mutexCola);
+
+        nuevosJugadores.wait(bloqueo, [] {
+            return colaJugadores.size() >= 2;
+        });
+
+        // Obtener los dos jugadores
+        int jugadorPuma = colaJugadores.front();
+        colaJugadores.pop();
+
+        int jugadorPerros = colaJugadores.front();
+        colaJugadores.pop();
+
+        bloqueo.unlock();
+
+        pthread_mutex_lock(&mutexLog);
+        cout << "\n[ MATCHMAKER ]" << endl;
+        cout << "Emparejamiento realizado." << endl;
+        cout << "Puma: Jugador " << jugadorPuma << endl;
+        cout << "Perros: Jugador " << jugadorPerros << endl;
+        cout << "Asignando mesa..." << endl;
+        pthread_mutex_unlock(&mutexLog);
+
+        // Crear partida
+        partidas->emplace_back(
+            jugarPartida,
+            i + 1,
+            jugadorPuma,
+            jugadorPerros
+        );
+    }
+}
+
 int main(int argc, char* argv[])
 {
     if (argc != 3) {
@@ -433,14 +499,30 @@ int main(int argc, char* argv[])
     sem_init(&mesas, 0, M);
     pthread_mutex_init(&mutexLog, nullptr);
 
+    vector<thread> clientes;
     vector<thread> partidas;
 
-    int cantidadPartidas = N / 2;
+    cout << "\nServidor Komikan iniciado." << endl;
+    cout << "Jugadores esperados: " << N << endl;
+    cout << "Mesas disponibles: " << M << endl;
 
-    for (int i = 0; i < cantidadPartidas; i++) {
-        partidas.emplace_back(jugarPartida, i + 1);
+    // Iniciar Matchmaker
+    thread hiloMatchmaker(matchmaker, N, &partidas);
+
+    // Simular llegada concurrente de jugadores
+    for (int i = 0; i < N; i++) {
+        clientes.emplace_back(recibirJugador, i + 1);
     }
 
+    // Esperar a que lleguen todos los jugadores
+    for (auto& cliente : clientes) {
+        cliente.join();
+    }
+
+    // Esperar que el Matchmaker termine los emparejamientos
+    hiloMatchmaker.join();
+
+    // Esperar finalizacion de las partidas
     for (auto& partida : partidas) {
         partida.join();
     }
